@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "todo-application"
+version = "0.1.0"
+description = "Full-Stack Todo Application with AI Chat System"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn>=0.24.0",
+    "sqlmodel>=0.0.16",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-jose[cryptography]>=3.3.0",
+    "psycopg2-binary>=2.9.9",
+    "alembic>=1.13.1",
+    "python-multipart>=0.0.6"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "httpx>=0.25.0",
+    "black>=23.0.0",
+    "isort>=5.10.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["phase2*", "phase3*"]
