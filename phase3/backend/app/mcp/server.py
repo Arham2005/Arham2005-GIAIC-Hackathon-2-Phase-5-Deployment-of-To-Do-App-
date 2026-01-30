@@ -1,17 +1,29 @@
-from typing import Dict, Callable, Any
+from typing import Dict, Any, List
 from sqlmodel import Session
+import json
 
 
 class MCPServer:
     def __init__(self, db: Session):
         self.db = db
-        self.tools: Dict[str, Callable] = {}
+        self.tools: Dict[str, Dict[str, Any]] = {}
 
-    def register_tool(self, name: str, func: Callable):
+    def register_tool(self, name: str, func: callable, description: str = "", parameters: Dict[str, Any] = None):
         """
-        Register a tool with the MCP server
+        Register a tool with the MCP server following OpenAI function calling format
         """
-        self.tools[name] = func
+        if parameters is None:
+            parameters = {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+
+        self.tools[name] = {
+            "function": func,
+            "description": description,
+            "parameters": parameters
+        }
 
     def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """
@@ -20,8 +32,8 @@ class MCPServer:
         if name not in self.tools:
             raise ValueError(f"Tool '{name}' is not registered")
 
-        # Add the database session to the arguments
-        tool_func = self.tools[name]
+        tool_info = self.tools[name]
+        tool_func = tool_info["function"]
 
         # Check if the function expects a db parameter
         import inspect
@@ -39,34 +51,27 @@ class MCPServer:
         """
         return list(self.tools.keys())
 
-    def get_tool_schema(self, name: str) -> Dict[str, Any]:
+    def get_openai_tools(self) -> List[Dict[str, Any]]:
         """
-        Get the schema for a specific tool (for AI model consumption)
+        Get tools in OpenAI-compatible format for function calling
+        """
+        openai_tools = []
+        for name, tool_info in self.tools.items():
+            openai_tool = {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": tool_info["description"],
+                    "parameters": tool_info["parameters"]
+                }
+            }
+            openai_tools.append(openai_tool)
+        return openai_tools
+
+    def get_tool_by_name(self, name: str) -> Dict[str, Any]:
+        """
+        Get a specific tool definition by name
         """
         if name not in self.tools:
             raise ValueError(f"Tool '{name}' is not registered")
-
-        # This would typically return a JSON schema for the tool
-        # For now, we'll return a basic schema based on function signature
-        import inspect
-        sig = inspect.signature(self.tools[name])
-
-        properties = {}
-        required = []
-        for param_name, param in sig.parameters.items():
-            # Skip 'db' parameter as it's injected by the server
-            if param_name == 'db':
-                continue
-
-            properties[param_name] = {"type": "string"}  # Simplified
-            required.append(param_name)
-
-        return {
-            "name": name,
-            "description": getattr(self.tools[name], '__doc__', ''),
-            "parameters": {
-                "type": "object",
-                "properties": properties,
-                "required": required
-            }
-        }
+        return self.tools[name]

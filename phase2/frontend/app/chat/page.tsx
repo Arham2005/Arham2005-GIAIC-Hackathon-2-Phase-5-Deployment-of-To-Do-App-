@@ -77,22 +77,6 @@ const ChatPage = () => {
 
     if (!inputMessage.trim() || isLoading) return;
 
-    if (!activeConversation) {
-      // Start a new conversation if none is active
-      const convData = {
-        title: `Chat ${new Date().toLocaleString()}`
-      };
-
-      try {
-        const response = await chatAPI.startConversation(convData);
-        setActiveConversation(response.id);
-      } catch (err) {
-        setError('Failed to start new conversation');
-        console.error('Error starting conversation:', err);
-        return;
-      }
-    }
-
     const userMessage: Message = {
       id: Date.now(), // Temporary ID
       content: inputMessage,
@@ -108,14 +92,37 @@ const ChatPage = () => {
     setError('');
 
     try {
-      const response = await chatAPI.sendMessage(activeConversation!, { content: messageToSend });
+      // Get user ID from token (decode JWT to extract user_id)
+      const token = localStorage.getItem('auth_token');
+      let userId = 1; // fallback
+
+      if (token) {
+        try {
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split('')
+              .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+              .join('')
+          );
+
+          const decodedToken = JSON.parse(jsonPayload);
+          userId = decodedToken.user_id || decodedToken.sub || 1;
+        } catch (decodeErr) {
+          console.error('Error decoding token:', decodeErr);
+          userId = 1; // fallback
+        }
+      }
+
+      const response = await chatAPI.sendChatMessage(userId, messageToSend, activeConversation || undefined);
 
       // Add AI response to messages
       const aiMessage: Message = {
         id: Date.now() + 1, // Temporary ID
-        content: response.ai_response.content,
+        content: response.response,
         role: 'assistant',
-        created_at: response.ai_response.created_at
+        created_at: new Date().toISOString()
       };
 
       setMessages(prev => [...prev, aiMessage]);

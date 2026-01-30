@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { chatAPI } from '../../lib/chat';
-import { isAuthenticated, removeAuthToken } from '../../lib/auth';
+import { isAuthenticated, removeAuthToken, getUserFromToken } from '../../lib/auth';
 
 interface Message {
   id: number;
@@ -16,6 +16,12 @@ interface Conversation {
   id: number;
   title: string;
   created_at: string;
+}
+
+interface ChatResponse {
+  conversation_id: number;
+  response: string;
+  tool_calls: Array<any>; // Array of tool calls made during the interaction
 }
 
 const ChatPage = () => {
@@ -77,21 +83,16 @@ const ChatPage = () => {
 
     if (!inputMessage.trim() || isLoading) return;
 
-    if (!activeConversation) {
-      // Start a new conversation if none is active
-      const convData = {
-        title: `Chat ${new Date().toLocaleString()}`
-      };
-
-      try {
-        const response = await chatAPI.startConversation(convData);
-        setActiveConversation(response.id);
-      } catch (err) {
-        setError('Failed to start new conversation');
-        console.error('Error starting conversation:', err);
-        return;
-      }
+    const userFromToken = getUserFromToken();
+    if (!userFromToken || !userFromToken.userId) {
+      setError('User not authenticated');
+      return;
     }
+
+    const currentUserId = userFromToken.userId;
+
+    // If no active conversation, we'll let the backend create one
+    const conversationId = activeConversation || undefined;
 
     const userMessage: Message = {
       id: Date.now(), // Temporary ID
@@ -108,17 +109,29 @@ const ChatPage = () => {
     setError('');
 
     try {
-      const response = await chatAPI.sendMessage(activeConversation!, { content: messageToSend });
+      // Use the new API endpoint that follows the updated specification
+      const response: ChatResponse = await chatAPI.sendChatMessage(currentUserId, messageToSend, conversationId);
+
+      // Update active conversation if it changed
+      if (response.conversation_id !== activeConversation) {
+        setActiveConversation(response.conversation_id);
+      }
 
       // Add AI response to messages
       const aiMessage: Message = {
         id: Date.now() + 1, // Temporary ID
-        content: response.ai_response.content,
+        content: response.response,
         role: 'assistant',
-        created_at: response.ai_response.created_at
+        created_at: new Date().toISOString()
       };
 
       setMessages(prev => [...prev, aiMessage]);
+
+      // Optionally display tool calls information to the user
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        console.log('Tool calls made:', response.tool_calls);
+        // You could optionally show a notification about tool calls
+      }
     } catch (err) {
       setError('Failed to send message');
       console.error('Error sending message:', err);

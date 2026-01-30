@@ -45,6 +45,19 @@ export const chatAPI = {
       body: JSON.stringify(messageData),
     }),
 
+  // New API endpoint following the updated specification
+  sendChatMessage: (userId: number, message: string, conversationId?: number) => {
+    const requestData = {
+      message: message,
+      conversation_id: conversationId || null
+    };
+
+    return chatApiRequest(`/${userId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+  },
+
   getConversation: (conversationId: number) =>
     chatApiRequest(`/${conversationId}`),
 };

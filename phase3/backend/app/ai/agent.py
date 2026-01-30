@@ -10,38 +10,254 @@ import json
 import re
 
 
-def process_user_message(message: str, user_id: int, db: Session) -> str:
+def setup_mcp_server(db: Session) -> MCPServer:
+    """
+    Setup MCP server with all tools properly configured for OpenAI integration
+    """
+    mcp_server = MCPServer(db)
+
+    # Register add_task tool with advanced parameters
+    add_task_params = {
+        "type": "object",
+        "properties": {
+            "user_id": {
+                "type": "string",
+                "description": "The user ID"
+            },
+            "title": {
+                "type": "string",
+                "description": "The title of the task to add"
+            },
+            "description": {
+                "type": "string",
+                "description": "The description of the task to add (optional)"
+            },
+            "priority": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "urgent"],
+                "description": "Task priority level (optional)",
+                "default": "medium"
+            },
+            "tags": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                },
+                "description": "List of tags for the task (optional)"
+            },
+            "due_date": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Due date for the task in ISO format (optional)"
+            },
+            "recurring": {
+                "type": "boolean",
+                "description": "Whether the task is recurring (optional)",
+                "default": False
+            },
+            "recurrence_pattern": {
+                "type": "string",
+                "enum": ["daily", "weekly", "monthly", "yearly"],
+                "description": "Recurrence pattern for recurring tasks (optional)"
+            },
+            "parent_task_id": {
+                "type": "integer",
+                "description": "ID of parent task if this is a subtask (optional)"
+            }
+        },
+        "required": ["user_id", "title"]
+    }
+    mcp_server.register_tool("add_task", add_task_tool, "Add a new task for the user with advanced features", add_task_params)
+
+    # Register list_tasks tool with advanced parameters
+    list_tasks_params = {
+        "type": "object",
+        "properties": {
+            "user_id": {
+                "type": "string",
+                "description": "The user ID"
+            },
+            "status": {
+                "type": "string",
+                "description": "Filter tasks by completion status (all, pending, completed)",
+                "enum": ["all", "pending", "completed"]
+            },
+            "priority": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "urgent"],
+                "description": "Filter tasks by priority level (optional)"
+            },
+            "tags": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                },
+                "description": "Filter tasks by tags (optional)"
+            },
+            "due_date_from": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Filter tasks with due date after this date (optional)"
+            },
+            "due_date_to": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Filter tasks with due date before this date (optional)"
+            },
+            "search_query": {
+                "type": "string",
+                "description": "Search in title and description (optional)"
+            },
+            "sort_by": {
+                "type": "string",
+                "enum": ["created_at", "due_date", "priority"],
+                "description": "Field to sort by (optional)",
+                "default": "created_at"
+            },
+            "sort_order": {
+                "type": "string",
+                "enum": ["asc", "desc"],
+                "description": "Sort order (optional)",
+                "default": "asc"
+            }
+        },
+        "required": ["user_id"]
+    }
+    mcp_server.register_tool("list_tasks", list_tasks_tool, "List tasks for the user with advanced filtering and sorting", list_tasks_params)
+
+    # Register update_task tool with advanced parameters
+    update_task_params = {
+        "type": "object",
+        "properties": {
+            "user_id": {
+                "type": "string",
+                "description": "The user ID"
+            },
+            "task_id": {
+                "type": "integer",
+                "description": "The ID of the task to update"
+            },
+            "title": {
+                "type": "string",
+                "description": "The new title for the task (optional)"
+            },
+            "description": {
+                "type": "string",
+                "description": "The new description for the task (optional)"
+            },
+            "completed": {
+                "type": "boolean",
+                "description": "Whether the task is completed (optional)"
+            },
+            "priority": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "urgent"],
+                "description": "New priority level for the task (optional)"
+            },
+            "tags": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                },
+                "description": "New tags for the task (optional)"
+            },
+            "due_date": {
+                "type": "string",
+                "format": "date-time",
+                "description": "New due date for the task in ISO format (optional)"
+            },
+            "recurring": {
+                "type": "boolean",
+                "description": "Whether the task is recurring (optional)"
+            },
+            "recurrence_pattern": {
+                "type": "string",
+                "enum": ["daily", "weekly", "monthly", "yearly"],
+                "description": "Recurrence pattern for recurring tasks (optional)"
+            },
+            "parent_task_id": {
+                "type": "integer",
+                "description": "New parent task ID if this is a subtask (optional)"
+            },
+            "reminder_sent": {
+                "type": "boolean",
+                "description": "Whether a reminder has been sent (optional)"
+            }
+        },
+        "required": ["user_id", "task_id"]
+    }
+    mcp_server.register_tool("update_task", update_task_tool, "Update an existing task for the user with advanced features", update_task_params)
+
+    # Register complete_task tool with proper parameters
+    complete_task_params = {
+        "type": "object",
+        "properties": {
+            "user_id": {
+                "type": "string",
+                "description": "The user ID"
+            },
+            "task_id": {
+                "type": "integer",
+                "description": "The ID of the task to complete"
+            }
+        },
+        "required": ["user_id", "task_id"]
+    }
+    mcp_server.register_tool("complete_task", complete_task_tool, "Mark a task as complete for the user", complete_task_params)
+
+    # Register delete_task tool with proper parameters
+    delete_task_params = {
+        "type": "object",
+        "properties": {
+            "user_id": {
+                "type": "string",
+                "description": "The user ID"
+            },
+            "task_id": {
+                "type": "integer",
+                "description": "The ID of the task to delete"
+            }
+        },
+        "required": ["user_id", "task_id"]
+    }
+    mcp_server.register_tool("delete_task", delete_task_tool, "Delete a task for the user", delete_task_params)
+
+    return mcp_server
+
+
+def process_user_message(message: str, user_id: int, db: Session) -> Dict[str, Any]:
     """
     Process a user message using the AI agent and return an appropriate response.
     The agent will analyze the message and potentially call MCP tools to perform actions.
+    Returns a dictionary with the response and any tool calls made.
     """
 
-    # Initialize MCP Server with the user's tools
-    mcp_server = MCPServer(db)
-
-    # Register all available tools
-    mcp_server.register_tool("add_task", add_task_tool)
-    mcp_server.register_tool("list_tasks", list_tasks_tool)
-    mcp_server.register_tool("update_task", update_task_tool)
-    mcp_server.register_tool("complete_task", complete_task_tool)
-    mcp_server.register_tool("delete_task", delete_task_tool)
+    # Setup MCP Server with properly configured tools
+    mcp_server = setup_mcp_server(db)
 
     # Analyze the user message to determine intent
     intent = analyze_intent(message)
 
     # Process based on intent
     if intent == "add_task":
-        return handle_add_task(message, user_id, db, mcp_server)
+        response = handle_add_task(message, user_id, db, mcp_server)
     elif intent == "list_tasks":
-        return handle_list_tasks(message, user_id, db, mcp_server)
+        response = handle_list_tasks(message, user_id, db, mcp_server)
     elif intent == "update_task":
-        return handle_update_task(message, user_id, db, mcp_server)
+        response = handle_update_task(message, user_id, db, mcp_server)
     elif intent == "complete_task":
-        return handle_complete_task(message, user_id, db, mcp_server)
+        response = handle_complete_task(message, user_id, db, mcp_server)
     elif intent == "delete_task":
-        return handle_delete_task(message, user_id, db, mcp_server)
+        response = handle_delete_task(message, user_id, db, mcp_server)
     else:
-        return handle_general_query(message, user_id, db, mcp_server)
+        response = handle_general_query(message, user_id, db, mcp_server)
+
+    # Return response with empty tool_calls for now
+    # In a real OpenAI integration, we would return actual tool calls
+    return {
+        "response": response,
+        "tool_calls": []  # Will be populated when using actual OpenAI integration
+    }
 
 
 def analyze_intent(message: str) -> str:
@@ -100,12 +316,12 @@ def handle_add_task(message: str, user_id: int, db: Session, mcp_server: MCPServ
         tool_args = {
             "title": title,
             "description": description or "",
-            "user_id": user_id
+            "user_id": str(user_id)  # Convert to string as expected by new tool
         }
 
         try:
             result = mcp_server.call_tool("add_task", tool_args)
-            return f"I've added the task '{title}' to your list. {result}"
+            return f"I've added the task '{result['title']}' to your list with ID {result['task_id']}."
         except Exception as e:
             return f"Sorry, I couldn't add the task. Error: {str(e)}"
     else:
@@ -116,14 +332,29 @@ def handle_list_tasks(message: str, user_id: int, db: Session, mcp_server: MCPSe
     """
     Handle listing tasks based on the user's message.
     """
+    # Determine status filter from message
+    status = "all"
+    if "pending" in message.lower() or "incomplete" in message.lower():
+        status = "pending"
+    elif "completed" in message.lower() or "done" in message.lower():
+        status = "completed"
+
     try:
-        result = mcp_server.call_tool("list_tasks", {"user_id": user_id})
+        result = mcp_server.call_tool("list_tasks", {"user_id": str(user_id), "status": status})
 
         if isinstance(result, list) and len(result) == 0:
             return "You don't have any tasks yet. You can add some tasks!"
         else:
-            task_list = "\n".join([f"- {task['title']}" + (f" ({task['description']})" if task.get('description') else "") for task in result])
-            return f"Here are your tasks:\n{task_list}"
+            task_list = []
+            for task in result:
+                status_text = "✓" if task['completed'] else "○"
+                task_str = f"{status_text} [{task['id']}] {task['title']}"
+                if task.get('description'):
+                    task_str += f" - {task['description']}"
+                task_list.append(task_str)
+
+            status_label = status if status != "all" else "all"
+            return f"Here are your {status_label} tasks:\n" + "\n".join([f"  {task}" for task in task_list])
     except Exception as e:
         return f"Sorry, I couldn't retrieve your tasks. Error: {str(e)}"
 
@@ -143,20 +374,16 @@ def handle_update_task(message: str, user_id: int, db: Session, mcp_server: MCPS
         title_match = re.search(r"(?:title|name|to)\s+(?:is\s+)?['\"](.+?)['\"]", message)
         desc_match = re.search(r"(?:description|desc|details)\s+(?:is\s+)?['\"](.+?)['\"]", message)
 
-        update_fields = {}
+        update_args = {"user_id": str(user_id), "task_id": task_id}
         if title_match:
-            update_fields["title"] = title_match.group(1)
+            update_args["title"] = title_match.group(1)
         if desc_match:
-            update_fields["description"] = desc_match.group(1)
+            update_args["description"] = desc_match.group(1)
 
-        if update_fields:
+        if "title" in update_args or "description" in update_args:
             try:
-                result = mcp_server.call_tool("update_task", {
-                    "task_id": task_id,
-                    "fields": update_fields,
-                    "user_id": user_id
-                })
-                return f"I've updated task {task_id}. {result}"
+                result = mcp_server.call_tool("update_task", update_args)
+                return f"I've updated task {result['task_id']} to '{result['title']}'."
             except Exception as e:
                 return f"Sorry, I couldn't update the task. Error: {str(e)}"
         else:
@@ -178,9 +405,9 @@ def handle_complete_task(message: str, user_id: int, db: Session, mcp_server: MC
         try:
             result = mcp_server.call_tool("complete_task", {
                 "task_id": task_id,
-                "user_id": user_id
+                "user_id": str(user_id)
             })
-            return f"I've marked task {task_id} as complete. {result}"
+            return f"I've marked task {result['task_id']} '{result['title']}' as complete."
         except Exception as e:
             return f"Sorry, I couldn't complete the task. Error: {str(e)}"
     else:
@@ -200,9 +427,9 @@ def handle_delete_task(message: str, user_id: int, db: Session, mcp_server: MCPS
         try:
             result = mcp_server.call_tool("delete_task", {
                 "task_id": task_id,
-                "user_id": user_id
+                "user_id": str(user_id)
             })
-            return f"I've deleted task {task_id}. {result}"
+            return f"I've deleted task {result['task_id']} '{result['title']}'."
         except Exception as e:
             return f"Sorry, I couldn't delete the task. Error: {str(e)}"
     else:

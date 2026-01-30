@@ -12,7 +12,20 @@ import logging
 # Suppress the bcrypt version warning
 logging.getLogger("passlib").setLevel(logging.ERROR)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Initialize bcrypt context with explicit backend settings to avoid runtime initialization issues
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__ident="2b",
+    bcrypt__rounds=12
+)
+
+# Pre-initialize bcrypt backend to avoid runtime issues
+try:
+    pwd_context.hash("initialization_test")
+except:
+    # If initialization fails, we'll handle it during actual usage
+    pass
 security = HTTPBearer()
 
 

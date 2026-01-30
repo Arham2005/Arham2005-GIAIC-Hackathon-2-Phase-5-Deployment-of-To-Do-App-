@@ -1,0 +1,66 @@
+# Frontend service with Dapr sidecar for the Todo Chatbot application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: todo-app
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "todo-frontend"
+        dapr.io/app-port: "3000"
+        dapr.io/config: "daprConfig"
+    spec:
+      containers:
+      - name: frontend
+        image: node:18-alpine
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://backend-service:8000"
+        - name: NEXT_PUBLIC_CHAT_API_URL
+          value: "http://backend-service:8000/chat"
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          apk add --no-cache git && \
+          git clone https://github.com/user/todo-frontend.git /app && \
+          cd /app && \
+          npm install && \
+          npm run build && \
+          npm start
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+# Frontend service
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: todo-app
+  labels:
+    app: frontend
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    name: http
+  selector:
+    app: frontend
+  type: ClusterIP

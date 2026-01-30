@@ -1,0 +1,98 @@
+# Dapr component configurations for Cloud deployment (AKS/GKE)
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: pubsub.azure.servicebus
+  version: v1
+  metadata:
+  - name: connectionString
+    secretKeyRef:
+      name: dapr-secrets
+      key: azure-servicebus-connection-string
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.azure.cosmosdb
+  version: v1
+  metadata:
+  - name: url
+    secretKeyRef:
+      name: dapr-secrets
+      key: cosmosdb-url
+  - name: masterKey
+    secretKeyRef:
+      name: dapr-secrets
+      key: cosmosdb-master-key
+  - name: database
+    value: "todo-db"
+  - name: collection
+    value: "state"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: cron-binding
+spec:
+  type: bindings.cron
+  version: v1
+  metadata:
+  - name: schedule
+    value: "@every 1m"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: secretstore
+spec:
+  type: secretstores.azure.keyvault
+  version: v1
+  metadata:
+  - name: vaultName
+    secretKeyRef:
+      name: dapr-secrets
+      key: keyvault-name
+---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: daprConfig
+spec:
+  tracing:
+    samplingRate: "1"
+    zipkin:
+      endpointAddress: "http://zipkin.dapr-system.svc.cluster.local:9411/api/v2/spans"
+  metric:
+    enabled: true
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: kafka-pubsub
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+  - name: brokers
+    value: "redpanda-cluster-kafka-bootstrap:9092"
+  - name: consumerGroup
+    value: "todo-consumer-group"
+  - name: disableTls
+    value: "false"
+  - name: authRequired
+    value: "true"
+  - name: saslUsername
+    secretKeyRef:
+      name: dapr-secrets
+      key: kafka-username
+  - name: saslPassword
+    secretKeyRef:
+      name: dapr-secrets
+      key: kafka-password
+  - name: saslMechanism
+    value: "SCRAM-SHA-256"

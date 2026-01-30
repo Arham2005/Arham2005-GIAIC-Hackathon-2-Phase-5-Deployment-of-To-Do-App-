@@ -1,0 +1,34 @@
+# Kafka configuration for cloud deployment (using managed service)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: confluent-secrets
+  namespace: todo-app
+type: Opaque
+data:
+  # These would be base64 encoded values in production
+  api-key: <base64-encoded-api-key>
+  api-secret: <base64-encoded-api-secret>
+---
+# Kafka topics configuration (conceptual - would be managed by the Kafka service)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topic-setup
+  namespace: todo-app
+spec:
+  template:
+    spec:
+      containers:
+      - name: kafka-topic-setup
+        image: confluentinc/cp-kafka:latest
+        command: ['sh', '-c']
+        args:
+        - |
+          kafka-topics --create --topic task-events --bootstrap-server $KAFKA_BROKER --partitions 3 --replication-factor 1
+          kafka-topics --create --topic reminder-events --bootstrap-server $KAFKA_BROKER --partitions 3 --replication-factor 1
+          kafka-topics --create --topic notification-events --bootstrap-server $KAFKA_BROKER --partitions 3 --replication-factor 1
+        env:
+        - name: KAFKA_BROKER
+          value: "your-confluent-cluster-broker-url"
+      restartPolicy: OnFailure

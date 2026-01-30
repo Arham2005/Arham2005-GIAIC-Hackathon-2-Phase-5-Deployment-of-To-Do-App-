@@ -111,3 +111,19 @@ def complete_task(db: Session, task_id: int, user_id: int) -> Optional[TaskRead]
             created_at=db_task.created_at
         )
     return None
+
+
+def get_tasks_by_status(db: Session, user_id: int, completed: bool) -> List[TaskRead]:
+    statement = select(Task).where(Task.user_id == user_id, Task.completed == completed)
+    db_tasks = db.exec(statement).all()
+    # Convert to TaskRead models to avoid relationship issues
+    return [
+        TaskRead.from_orm(task) if hasattr(TaskRead, 'from_orm') else TaskRead(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            completed=task.completed,
+            user_id=task.user_id,
+            created_at=task.created_at
+        ) for task in db_tasks
+    ]

@@ -88,13 +88,33 @@ export const taskAPI = {
 
   getById: (id: number) => apiRequest(`/tasks/${id}/`),
 
-  create: (taskData: { title: string; description?: string }) =>
+  create: (taskData: {
+    title: string;
+    description?: string;
+    priority?: string;
+    tags?: string[];
+    due_date?: string;
+    recurring?: boolean;
+    recurrence_pattern?: string;
+    parent_task_id?: number;
+  }) =>
     apiRequest('/tasks/', {
       method: 'POST',
       body: JSON.stringify(taskData),
     }),
 
-  update: (id: number, taskData: { title?: string; description?: string; completed?: boolean }) =>
+  update: (id: number, taskData: {
+    title?: string;
+    description?: string;
+    completed?: boolean;
+    priority?: string;
+    tags?: string[];
+    due_date?: string;
+    recurring?: boolean;
+    recurrence_pattern?: string;
+    parent_task_id?: number;
+    reminder_sent?: boolean;
+  }) =>
     apiRequest(`/tasks/${id}/`, {
       method: 'PUT',
       body: JSON.stringify(taskData),
@@ -109,4 +129,32 @@ export const taskAPI = {
     apiRequest(`/tasks/${id}/complete/`, {
       method: 'POST',
     }),
+
+  // Additional API functions for advanced features
+  getDueSoon: (daysAhead: number = 3) => apiRequest(`/tasks/due-soon/?days_ahead=${daysAhead}`),
+
+  getRecurring: () => apiRequest(`/tasks/recurring/`),
+
+  filter: (params: {
+    completed?: boolean;
+    priority?: string;
+    tags?: string[];
+    due_date_from?: string;
+    due_date_to?: string;
+    search_query?: string;
+    sort_by?: string;
+    sort_order?: string;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params.completed !== undefined) queryParams.append('completed', params.completed.toString());
+    if (params.priority) queryParams.append('priority', params.priority);
+    if (params.tags) queryParams.append('tags', params.tags.join(','));
+    if (params.due_date_from) queryParams.append('due_date_from', params.due_date_from);
+    if (params.due_date_to) queryParams.append('due_date_to', params.due_date_to);
+    if (params.search_query) queryParams.append('search_query', params.search_query);
+    if (params.sort_by) queryParams.append('sort_by', params.sort_by);
+    if (params.sort_order) queryParams.append('sort_order', params.sort_order);
+
+    return apiRequest(`/tasks/?${queryParams.toString()}`);
+  },
 };

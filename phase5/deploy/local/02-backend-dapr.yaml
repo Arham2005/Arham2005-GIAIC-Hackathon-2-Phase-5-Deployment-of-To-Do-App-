@@ -1,0 +1,104 @@
+# Backend service with Dapr sidecar for the Todo Chatbot application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: todo-app
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "todo-backend"
+        dapr.io/app-port: "8000"
+        dapr.io/config: "daprConfig"
+        dapr.io/log-level: "debug"
+    spec:
+      containers:
+      - name: backend
+        image: python:3.9-slim
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://postgres:postgres@postgresql:5432/todo_db"
+        - name: SECRET_KEY
+          value: "your-secret-key-here"
+        - name: ALGORITHM
+          value: "HS256"
+        - name: ACCESS_TOKEN_EXPIRE_MINUTES
+          value: "30"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: todo-secrets
+              key: openai-api-key
+        - name: REDIS_HOST
+          value: "redis-master"
+        - name: REDIS_PORT
+          value: "6379"
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y git build-essential && \
+          pip install --upgrade pip && \
+          pip install fastapi uvicorn sqlmodel python-multipart python-jose[cryptography] passlib[bcrypt] openai psycopg2-binary redis && \
+          git clone https://github.com/user/todo-backend.git /app && \
+          cd /app && \
+          pip install -e . && \
+          python -c "
+          import time
+          import subprocess
+          import sys
+
+          # Wait for PostgreSQL to be ready
+          print('Waiting for PostgreSQL...')
+          for i in range(30):
+            try:
+              import psycopg2
+              conn = psycopg2.connect('postgresql://postgres:postgres@postgresql:5432/todo_db')
+              conn.close()
+              print('PostgreSQL is ready!')
+              break
+            except Exception as e:
+              print(f'Attempt {i+1}: PostgreSQL not ready - {e}')
+              time.sleep(5)
+          else:
+            print('PostgreSQL never became ready')
+            sys.exit(1)
+
+          # Run the application
+          exec('uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload')
+          "
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+# Backend service
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: todo-app
+  labels:
+    app: backend
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  selector:
+    app: backend
+  type: ClusterIP

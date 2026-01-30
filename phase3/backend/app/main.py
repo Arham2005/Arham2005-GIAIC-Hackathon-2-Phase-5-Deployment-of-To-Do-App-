@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .api.routes import chat
+from .api.routes.tasks import router as task_router
 from phase2.backend.app.api.routes.auth import router as auth_router
-from phase2.backend.app.api.routes.tasks import router as task_router
 import os
 
 app = FastAPI(title="Todo AI Chat API", version="1.0.0")
