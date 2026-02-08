@@ -123,7 +123,7 @@ const TasksPage = () => {
   };
 
   const handleFilterChange = (key: string, value: any) => {
-    setFilters(prev => ({
+    setFilters((prev: any) => ({
       ...prev,
       [key]: value
     }));
