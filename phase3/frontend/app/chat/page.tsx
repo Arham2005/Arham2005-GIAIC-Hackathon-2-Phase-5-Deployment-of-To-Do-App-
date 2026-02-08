@@ -56,6 +56,8 @@ const ChatPage = () => {
     try {
       // For now, we'll just initialize the conversations state
       // In a real implementation, we would fetch from the API
+      // We'll leave this as is since the sidebar isn't actively used
+      // and conversations are managed by the active conversation state
     } catch (err) {
       setError('Failed to load conversations');
       console.error('Error loading conversations:', err);
@@ -91,8 +93,24 @@ const ChatPage = () => {
 
     const currentUserId = userFromToken.userId;
 
-    // If no active conversation, we'll let the backend create one
-    const conversationId = activeConversation || undefined;
+    // If no active conversation, create one first
+    let conversationId = activeConversation;
+    if (!conversationId) {
+      try {
+        const convData = {
+          title: `Chat ${new Date().toLocaleString()}`
+        };
+        const response = await chatAPI.startConversation(convData);
+        conversationId = response.id;
+        setActiveConversation(response.id);
+        setError('');
+      } catch (err) {
+        setError('Failed to start new conversation');
+        console.error('Error starting conversation:', err);
+        setIsLoading(false);
+        return;
+      }
+    }
 
     const userMessage: Message = {
       id: Date.now(), // Temporary ID
@@ -112,7 +130,7 @@ const ChatPage = () => {
       // Use the new API endpoint that follows the updated specification
       const response: ChatResponse = await chatAPI.sendChatMessage(currentUserId, messageToSend, conversationId);
 
-      // Update active conversation if it changed
+      // Update active conversation if it changed (should be the same, but just in case)
       if (response.conversation_id !== activeConversation) {
         setActiveConversation(response.conversation_id);
       }
@@ -133,7 +151,7 @@ const ChatPage = () => {
         // You could optionally show a notification about tool calls
       }
     } catch (err) {
-      setError('Failed to send message');
+      setError(err instanceof Error ? err.message : 'Failed to send message');
       console.error('Error sending message:', err);
     } finally {
       setIsLoading(false);

@@ -1,10 +1,11 @@
 """
-Simple chat service that simulates AI responses without complex models
-This avoids the model conflicts while providing basic chat functionality
+Enhanced chat service that provides better natural language processing
+This improves the AI responses while maintaining compatibility with existing systems
 """
 import json
 from datetime import datetime
 from typing import Dict, List, Any
+import re
 
 # Simple in-memory storage for conversations (in production, use proper database)
 conversations_db = {}
@@ -52,37 +53,170 @@ def add_message_to_conversation(conversation_id: int, content: str, role: str, u
 def get_conversation_messages(conversation_id: int) -> List[Dict[str, Any]]:
     return messages_db.get(conversation_id, [])
 
-def simulate_ai_response(user_message: str, mock_tasks: List[Dict] = None) -> tuple[str, List[Dict]]:
-    """Simulate AI response based on user message and return potential tool calls"""
+def extract_task_details(text: str) -> Dict[str, Any]:
+    """Extract task details from natural language text"""
+    text_lower = text.lower().strip()
+
+    # Initialize defaults
+    result = {
+        "title": "",
+        "priority": "medium",
+        "due_date": None,
+        "tags": [],
+        "recurring": False,
+        "recurrence_pattern": None
+    }
+
+    # Extract task title - look for patterns like "add task to X", "create task X", etc.
+    title_patterns = [
+        r'(?:add|create|make|new|set up)\s+(?:a\s+)?(?:task|todo|to-do)\s+(?:called\s+|named\s+|to\s+|for\s+|about\s+)?(.+?)(?:\s+with|\s+and|\s+by|\s+on|\s+due|\s+every|\s+monthly|\s+weekly|\s+daily|\s+$)',
+        r'(?:add|create|make|new|set up)\s+(?:a\s+)?(?:task|todo|to-do)\s+(?:to\s+|for\s+)?(.+?)(?:\s+with|\s+and|\s+by|\s+on|\s+due|\s+every|\s+monthly|\s+weekly|\s+daily|\s+$)',
+        r'(?:add|create|make|new|set up)\s+(?:a\s+)?(.+?)(?:\s+with|\s+and|\s+by|\s+on|\s+due|\s+every|\s+monthly|\s+weekly|\s+daily|\s+$)',
+        r'task[:\s]+(.+?)(?:\s+with|\s+and|\s+by|\s+on|\s+due|\s+every|\s+monthly|\s+weekly|\s+daily|\s+$)'
+    ]
+
+    for pattern in title_patterns:
+        match = re.search(pattern, text_lower, re.IGNORECASE)
+        if match:
+            result["title"] = match.group(1).strip()
+            break
+
+    # Clean up the title further
+    if result["title"]:
+        # Remove common leading words that might be artifacts
+        result["title"] = re.sub(r'^(to|for)\s+', '', result["title"], flags=re.IGNORECASE).strip()
+
+    # If no title found, try to extract from the whole text
+    if not result["title"]:
+        # Remove common verbs and extract main content
+        result["title"] = text.strip()
+        # Clean up common phrases
+        for phrase in ['add a task', 'create a task', 'add task', 'create task', 'new task', 'task to', 'task for']:
+            result["title"] = re.sub(phrase, '', result["title"], flags=re.IGNORECASE).strip()
+
+    # Final cleanup - remove leading 'to' that might be left over
+    result["title"] = re.sub(r'^to\s+', '', result["title"], flags=re.IGNORECASE).strip()
+    result["title"] = result["title"].strip(' .,:')
+
+    # Determine priority
+    if any(word in text_lower for word in ['urgent', 'critical', 'emergency', 'asap', 'immediately']):
+        result["priority"] = "urgent"
+    elif any(word in text_lower for word in ['high', 'important', 'priority', 'crucial']):
+        result["priority"] = "high"
+    elif any(word in text_lower for word in ['low', 'minor', 'optional']):
+        result["priority"] = "low"
+
+    # Extract due dates
+    date_patterns = [
+        r'to\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+        r'by\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+        r'on\s+\w+\s+\d{1,2}(?:st|nd|rd|th)?',
+        r'due\s+(?:tomorrow|today|this week|next week|this month|next month)',
+        r'tomorrow',
+        r'today',
+        r'next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+        r'this\s+(?:week|month|year)'
+    ]
+
+    for pattern in date_patterns:
+        match = re.search(pattern, text_lower, re.IGNORECASE)
+        if match:
+            date_text = match.group(0)
+            # Convert to actual date (simplified)
+            if 'today' in date_text:
+                result["due_date"] = datetime.now().strftime('%Y-%m-%d')
+            elif 'tomorrow' in date_text:
+                result["due_date"] = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+            elif 'monday' in date_text:
+                # Calculate next Monday
+                today = datetime.now()
+                days_ahead = 0 if today.weekday() == 0 else 7 - today.weekday()
+                if today.weekday() == 0:  # If today is Monday, get next Monday
+                    days_ahead = 7
+                next_monday = today + timedelta(days_ahead)
+                result["due_date"] = next_monday.strftime('%Y-%m-%d')
+            # Add more date calculations as needed
+
+    # Extract tags
+    tag_patterns = [
+        r'tags?\s+(.+?)(?:\s+and|\s+or|\s+with|\s*$)',
+        r'with\s+tags?\s+(.+?)(?:\s+and|\s+or|\s+with|\s*$)',
+        r'labeled\s+as\s+(.+?)(?:\s+and|\s+or|\s+with|\s*$)'
+    ]
+
+    for pattern in tag_patterns:
+        match = re.search(pattern, text_lower, re.IGNORECASE)
+        if match:
+            tags_text = match.group(1)
+            # Split by commas, 'and', 'or'
+            tags = re.split(r',|\s+and\s+|\s+or\s+', tags_text)
+            result["tags"] = [tag.strip() for tag in tags if tag.strip()]
+            break
+
+    # Extract recurring patterns
+    if any(word in text_lower for word in ['every day', 'daily', 'each day']):
+        result["recurring"] = True
+        result["recurrence_pattern"] = "daily"
+    elif any(word in text_lower for word in ['every week', 'weekly', 'each week']):
+        result["recurring"] = True
+        result["recurrence_pattern"] = "weekly"
+    elif any(word in text_lower for word in ['every month', 'monthly', 'each month']):
+        result["recurring"] = True
+        result["recurrence_pattern"] = "monthly"
+    elif any(word in text_lower for word in ['every year', 'yearly', 'each year']):
+        result["recurring"] = True
+        result["recurrence_pattern"] = "yearly"
+
+    # Clean up title
+    if not result["title"].strip():
+        result["title"] = "New Task"
+
+    return result
+
+def process_task_command(user_message: str, user_id: int, mock_tasks: List[Dict] = None) -> tuple[str, List[Dict]]:
+    """Process natural language commands for task management with enhanced parsing"""
     if mock_tasks is None:
-        mock_tasks = []  # In a real implementation, this would come from DB
+        mock_tasks = []
 
     user_msg_lower = user_message.lower().strip()
 
-    # Handle natural language commands for tasks
-    if any(cmd in user_msg_lower for cmd in ['list ', 'show ', 'display ', 'give me', 'get ']) and any(word in user_msg_lower for word in ['task', 'tasks']):
-        if 'urgent' in user_msg_lower or 'high priority' in user_msg_lower or 'important' in user_msg_lower:
-            urgent_tasks = [task for task in mock_tasks if task.get('priority', '').lower() in ['urgent', 'high']]
+    # Check for greeting
+    if any(greeting in user_msg_lower for greeting in ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening']):
+        return "Hello! I'm your AI assistant. How can I help you manage your tasks today?", []
+
+    # Check for time/weather related queries
+    if 'time' in user_msg_lower and 'what time' in user_msg_lower:
+        current_time = datetime.now().strftime('%H:%M:%S')
+        return f"The current time is {current_time}. How can I help with your tasks?", []
+    elif 'date' in user_msg_lower and ('what date' in user_msg_lower or 'today\'s date' in user_msg_lower):
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        return f"Today's date is {current_date}. What task would you like to manage?", []
+
+    # Determine intent
+    if any(cmd in user_msg_lower for cmd in ['list', 'show', 'display', 'view', 'get', 'fetch']):
+        # List tasks
+        if 'urgent' in user_msg_lower or 'high priority' in user_msg_lower:
+            urgent_tasks = [t for t in mock_tasks if t.get('priority', '').lower() in ['urgent', 'high']]
             if urgent_tasks:
-                task_list = "\n".join([f"- {task['title']} (Priority: {task.get('priority', 'medium')})" for task in urgent_tasks])
-                response = f"I found {len(urgent_tasks)} urgent/high priority tasks:\n{task_list}"
+                task_list = "\n".join([f"- {t['title']} (Priority: {t.get('priority', 'medium')})" for t in urgent_tasks])
+                response = f"Here are your urgent/high priority tasks:\n{task_list}"
             else:
-                response = "You don't have any urgent/high priority tasks right now."
+                response = "You don't have any urgent or high priority tasks right now."
             return response, [{"name": "list_tasks", "arguments": {"priority": "urgent"}}]
 
         elif 'completed' in user_msg_lower:
-            completed_tasks = [task for task in mock_tasks if task.get('completed', False)]
+            completed_tasks = [t for t in mock_tasks if t.get('completed', False)]
             if completed_tasks:
-                task_list = "\n".join([f"- {task['title']}" for task in completed_tasks])
-                response = f"You have completed {len(completed_tasks)} tasks:\n{task_list}"
+                task_list = "\n".join([f"- {t['title']}" for t in completed_tasks])
+                response = f"Here are your completed tasks:\n{task_list}"
             else:
                 response = "You don't have any completed tasks yet."
             return response, [{"name": "list_tasks", "arguments": {"completed": True}}]
 
         elif 'pending' in user_msg_lower or 'not done' in user_msg_lower:
-            pending_tasks = [task for task in mock_tasks if not task.get('completed', False)]
+            pending_tasks = [t for t in mock_tasks if not t.get('completed', False)]
             if pending_tasks:
-                task_list = "\n".join([f"- {task['title']} (Priority: {task.get('priority', 'medium')})" for task in pending_tasks])
+                task_list = "\n".join([f"- {t['title']} (Priority: {t.get('priority', 'medium')})" for t in pending_tasks])
                 response = f"You have {len(pending_tasks)} pending tasks:\n{task_list}"
             else:
                 response = "You don't have any pending tasks."
@@ -90,68 +224,130 @@ def simulate_ai_response(user_message: str, mock_tasks: List[Dict] = None) -> tu
 
         else:
             if mock_tasks:
-                task_list = "\n".join([f"- {task['title']} (Priority: {task.get('priority', 'medium')})" for task in mock_tasks])
+                task_list = "\n".join([f"- {t['title']} (Priority: {t.get('priority', 'medium')})" for t in mock_tasks])
                 response = f"You have {len(mock_tasks)} tasks:\n{task_list}"
             else:
                 response = "You don't have any tasks yet."
             return response, [{"name": "list_tasks", "arguments": {}}]
 
-    elif any(cmd in user_msg_lower for cmd in ['add ', 'create ', 'make ', 'new ']) and any(word in user_msg_lower for word in ['task', 'todo']):
-        # Extract task details from natural language
-        import re
-        title_match = re.search(r"(?:add|create|make|new)\s+(?:a\s+)?(?:task|todo|to-do)\s+(.+?)(?:\s+with\s+prio|\.|$)", user_msg_lower)
-        if title_match:
-            task_title = title_match.group(1).strip()
+    elif any(cmd in user_msg_lower for cmd in ['add', 'create', 'new', 'make', 'build']) and any(word in user_msg_lower for word in ['task', 'todo', 'item', 'to-do']):
+        # Add task with enhanced parsing
+        task_details = extract_task_details(user_message)
+
+        # Build response
+        response_parts = [f"I've created a task: '{task_details['title']}'"]
+
+        if task_details['priority'] != 'medium':
+            response_parts.append(f"with {task_details['priority']} priority")
+
+        if task_details['due_date']:
+            response_parts.append(f"due on {task_details['due_date']}")
+
+        if task_details['recurring']:
+            response_parts.append(f"recurring {task_details['recurrence_pattern']}")
+
+        if task_details['tags']:
+            response_parts.append(f"with tags {task_details['tags']}")
+
+        response = " ".join(response_parts) + "."
+
+        # Create tool call with all extracted details
+        tool_args = {
+            "title": task_details['title'],
+            "description": "",
+            "priority": task_details['priority'],
+            "user_id": str(user_id)  # Ensure user_id is string
+        }
+
+        if task_details['due_date']:
+            tool_args["due_date"] = task_details['due_date']
+        if task_details['tags']:
+            tool_args["tags"] = task_details['tags']
+        if task_details['recurring']:
+            tool_args["recurring"] = True
+            tool_args["recurrence_pattern"] = task_details['recurrence_pattern']
+
+        return response, [{"name": "add_task", "arguments": tool_args}]
+
+    # Handle priority-specific commands that might not include 'task' explicitly
+    elif any(priority in user_msg_lower for priority in ['high priority task', 'low priority task', 'high priority', 'low priority', 'urgent task', 'important task']):
+        # Extract the full command
+        task_details = extract_task_details(user_message)
+
+        # Build response
+        response_parts = [f"I've created a task: '{task_details['title']}'"]
+
+        if task_details['priority'] != 'medium':
+            response_parts.append(f"with {task_details['priority']} priority")
+
+        if task_details['due_date']:
+            response_parts.append(f"due on {task_details['due_date']}")
+
+        if task_details['recurring']:
+            response_parts.append(f"recurring {task_details['recurrence_pattern']}")
+
+        if task_details['tags']:
+            response_parts.append(f"with tags {task_details['tags']}")
+
+        response = " ".join(response_parts) + "."
+
+        # Create tool call with all extracted details
+        tool_args = {
+            "title": task_details['title'],
+            "description": "",
+            "priority": task_details['priority'],
+            "user_id": str(user_id)  # Ensure user_id is string
+        }
+
+        if task_details['due_date']:
+            tool_args["due_date"] = task_details['due_date']
+        if task_details['tags']:
+            tool_args["tags"] = task_details['tags']
+        if task_details['recurring']:
+            tool_args["recurring"] = True
+            tool_args["recurrence_pattern"] = task_details['recurrence_pattern']
+
+        return response, [{"name": "add_task", "arguments": tool_args}]
+
+
+    elif any(cmd in user_msg_lower for cmd in ['update', 'change', 'modify', 'edit']) or any(word in user_msg_lower for word in ['complete', 'done', 'finish', 'mark']):
+        # Handle updates and completions
+        # Look for task references in the message
+        task_number_match = re.search(r'task\s+(\d+)', user_msg_lower)
+        if task_number_match:
+            task_id = int(task_number_match.group(1))
+
+            if any(word in user_msg_lower for word in ['complete', 'done', 'finish', 'mark']):
+                return f"I've marked task {task_id} as complete.", [{"name": "complete_task", "arguments": {"id": task_id, "user_id": str(user_id)}}]
+            else:
+                # For updates, extract what needs to be updated
+                response = f"What would you like to update for task {task_id}? Please specify the changes."
+                return response, []
         else:
-            task_title = "New task from chat"
+            if any(word in user_msg_lower for word in ['complete', 'done', 'finish', 'mark']):
+                response = "Which task would you like to mark as complete? Please specify the task number or name."
+                return response, []
+            else:
+                response = "Which task would you like to update? Please specify the task number or name and what changes to make."
+                return response, []
 
-        # Check for priority
-        priority = 'medium'
-        if any(word in user_msg_lower for word in ['urgent', 'critical', 'immediate']):
-            priority = 'urgent'
-        elif any(word in user_msg_lower for word in ['high', 'important']):
-            priority = 'high'
-        elif any(word in user_msg_lower for word in ['low', 'minor']):
-            priority = 'low'
-
-        response = f"I've created a task: '{task_title}' with {priority} priority."
-        return response, [{"name": "add_task", "arguments": {"title": task_title, "priority": priority}}]
-
-    elif 'complete' in user_msg_lower or 'done' in user_msg_lower or 'finish' in user_msg_lower:
-        # Look for task to complete
-        task_to_complete = None
-        for task in mock_tasks:
-            if task['title'].lower() in user_msg_lower or any(word in user_msg_lower.split() for word in task['title'].lower().split()):
-                task_to_complete = task['id']
-                break
-
-        if task_to_complete:
-            response = f"I've marked the task '{mock_tasks[0]['title'] if mock_tasks else 'unknown'}' as complete."
-            return response, [{"name": "complete_task", "arguments": {"id": task_to_complete}}]
+    elif any(cmd in user_msg_lower for cmd in ['delete', 'remove', 'cancel']):
+        # Delete task
+        task_number_match = re.search(r'task\s+(\d+)', user_msg_lower)
+        if task_number_match:
+            task_id = int(task_number_match.group(1))
+            return f"I've deleted task {task_id}.", [{"name": "delete_task", "arguments": {"id": task_id, "user_id": str(user_id)}}]
         else:
-            response = "Which task would you like to mark as complete?"
+            response = "Which task would you like to delete? Please specify the task number or name."
             return response, []
 
-    elif any(word in user_msg_lower for word in ['hello', 'hi', 'hey']):
-        return "Hello! I'm your AI assistant. How can I help you with your tasks today?", []
-    elif any(word in user_msg_lower for word in ['task', 'add', 'create']):
-        return "I can help you manage tasks! You can ask me to add, update, or check your tasks.", []
-    elif any(word in user_msg_lower for word in ['due', 'date', 'deadline']):
-        return "I can help you manage due dates for your tasks. Would you like to set or check due dates?", []
-    elif any(word in user_msg_lower for word in ['priority', 'important', 'urgent']):
-        return "I can help you set priorities for your tasks. What priority level would you like to set?", []
-    elif any(word in user_msg_lower for word in ['help', 'assist', 'support']):
-        return "I'm here to help! You can ask me to list tasks, add tasks, mark tasks as complete, or check priorities.", []
-    elif 'weather' in user_msg_lower:
-        return "I can't check the weather, but I can help you manage tasks related to weather!", []
-    elif 'time' in user_msg_lower:
-        return f"The current time is {datetime.now().strftime('%H:%M:%S')} but I can help you with time-sensitive tasks!", []
     else:
-        response = f"I understand you said: '{user_message}'. I can help you manage your tasks. Try saying 'list urgent tasks' or 'add a new task'."
+        # Default response for unrecognized commands
+        response = f"I understood you want to do something with tasks. Could you please be more specific? For example: 'Add a task to buy groceries' or 'Show me my tasks'."
         return response, []
 
 def process_chat_message(user_message: str, user_id: int, conversation_id: int = None, mock_tasks: List[Dict] = None) -> Dict[str, Any]:
-    """Process a chat message and return AI response"""
+    """Process a chat message and return AI response with proper tool calls"""
     global next_conv_id
 
     # Create new conversation if none provided
@@ -172,8 +368,8 @@ def process_chat_message(user_message: str, user_id: int, conversation_id: int =
     # Add user message
     user_msg = add_message_to_conversation(conversation_id, user_message, "user", user_id)
 
-    # Simulate AI response with potential tool calls
-    ai_response, tool_calls = simulate_ai_response(user_message, mock_tasks)
+    # Process message with enhanced logic
+    ai_response, tool_calls = process_task_command(user_message, user_id, mock_tasks)
 
     # Add AI response
     ai_msg = add_message_to_conversation(conversation_id, ai_response, "assistant", user_id)

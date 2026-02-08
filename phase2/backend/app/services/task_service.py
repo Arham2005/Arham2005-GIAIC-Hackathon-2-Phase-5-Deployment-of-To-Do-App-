@@ -5,7 +5,15 @@ from shared.models.user import User
 
 
 def create_task(db: Session, task: TaskCreate, user_id: int) -> TaskRead:
-    task_data = task.dict()
+    task_data = task.model_dump()
+    # Convert tags list to JSON string if tags are provided as a list
+    if 'tags' in task_data and task_data['tags'] is not None:
+        import json
+        if isinstance(task_data['tags'], list):
+            task_data['tags'] = json.dumps(task_data['tags'])
+    elif 'tags' not in task_data or task_data['tags'] is None:
+        task_data['tags'] = '[]'  # Default to empty JSON array
+
     db_task = Task(**task_data, user_id=user_id)
     db.add(db_task)
     db.commit()
@@ -59,7 +67,14 @@ def update_task(db: Session, task_id: int, task_update: TaskUpdate, user_id: int
     db_task = db.exec(statement).first()
 
     if db_task:
-        update_data = task_update.dict(exclude_unset=True)
+        update_data = task_update.model_dump(exclude_unset=True)
+
+        # Convert tags list to JSON string if tags are provided as a list
+        if 'tags' in update_data and update_data['tags'] is not None:
+            import json
+            if isinstance(update_data['tags'], list):
+                update_data['tags'] = json.dumps(update_data['tags'])
+
         for field, value in update_data.items():
             setattr(db_task, field, value)
 

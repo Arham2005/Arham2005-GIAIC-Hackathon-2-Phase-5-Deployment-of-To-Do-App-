@@ -2,10 +2,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 from ...database import get_session
-from ...models.task import TaskRead, TaskCreate, TaskUpdate
+from shared.models.task import TaskRead, TaskCreate, TaskUpdate
 from ...services.task_service import TaskService
 from ...api.deps import get_current_user
-from ...models.user import User
+from shared.models.user import User
 from pydantic import BaseModel
 from datetime import datetime
 

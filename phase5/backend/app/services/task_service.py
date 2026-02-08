@@ -1,19 +1,25 @@
 from typing import List, Optional
 from sqlmodel import Session, select
 from datetime import datetime, timedelta
-from ..models.task import Task, TaskCreate, TaskUpdate, TaskRead
+from shared.models.task import Task, TaskCreate, TaskUpdate, TaskRead
 import json
 
 
 class TaskService:
     def create_task(self, db: Session, task_data: TaskCreate, user_id: int) -> TaskRead:
         """Create a new task with advanced features"""
+        # Convert tags list to JSON string if it's provided as a list
+        if task_data.tags is not None and isinstance(task_data.tags, list):
+            tags_json = json.dumps(task_data.tags)
+        else:
+            tags_json = task_data.tags if task_data.tags is not None else '[]'
+
         db_task = Task(
             title=task_data.title,
             description=task_data.description,
             completed=task_data.completed,
             priority=task_data.priority,
-            tags=task_data.tags if task_data.tags else [],
+            tags=tags_json,
             due_date=task_data.due_date,
             recurring=task_data.recurring,
             recurrence_pattern=task_data.recurrence_pattern,
@@ -58,8 +64,10 @@ class TaskService:
 
         if tags:
             # Filter tasks that contain any of the specified tags
+            # Since tags are stored as JSON strings, we need to search inside the JSON
             for tag in tags:
-                statement = statement.where(Task.tags.contains([tag]))
+                # Search for the tag in the JSON string representation
+                statement = statement.where(Task.tags.contains(tag))
 
         if due_date_from:
             statement = statement.where(Task.due_date >= due_date_from)
@@ -102,9 +110,14 @@ class TaskService:
             return None
 
         # Update fields if they are provided
-        update_data = task_update.dict(exclude_unset=True)
+        update_data = task_update.model_dump(exclude_unset=True)
+
         for field, value in update_data.items():
-            setattr(db_task, field, value)
+            if field == 'tags' and isinstance(value, list):
+                # Convert tags list to JSON string
+                setattr(db_task, field, json.dumps(value))
+            else:
+                setattr(db_task, field, value)
 
         db_task.updated_at = datetime.utcnow()
 
@@ -174,12 +187,18 @@ class TaskService:
         next_due_date = self._calculate_next_occurrence(original_task.due_date, original_task.recurrence_pattern)
 
         # Create new task instance
+        # Need to convert tags back to list format for TaskCreate if they were converted to list by from_orm
+        original_task_tags = original_task.tags
+        if isinstance(original_task_tags, list):
+            # If tags were converted to list by from_orm, convert back to JSON string for storage
+            original_task_tags = json.dumps(original_task_tags)
+
         new_task_data = TaskCreate(
             title=original_task.title,
             description=original_task.description,
             completed=False,
             priority=original_task.priority,
-            tags=original_task.tags,
+            tags=original_task_tags,
             due_date=next_due_date,
             recurring=original_task.recurring,
             recurrence_pattern=original_task.recurrence_pattern,

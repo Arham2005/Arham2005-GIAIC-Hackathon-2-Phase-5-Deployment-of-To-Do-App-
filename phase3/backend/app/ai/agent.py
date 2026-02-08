@@ -8,6 +8,7 @@ from ..mcp.tools.complete_task import complete_task_tool
 from ..mcp.tools.delete_task import delete_task_tool
 import json
 import re
+from datetime import datetime
 
 
 def setup_mcp_server(db: Session) -> MCPServer:
@@ -263,10 +264,15 @@ def process_user_message(message: str, user_id: int, db: Session) -> Dict[str, A
 def analyze_intent(message: str) -> str:
     """
     Analyze the user message to determine the intent.
+    Order matters - check more specific intents first
     """
     message_lower = message.lower().strip()
 
-    # Define patterns for different intents
+    # Define patterns for different intents - order matters
+    if any(word in message_lower for word in ["update", "change", "modify", "edit"]):
+        if any(word in message_lower for word in ["task", "todo", "item"]):
+            return "update_task"
+
     if any(word in message_lower for word in ["add", "create", "new", "make"]):
         if any(word in message_lower for word in ["task", "todo", "item"]):
             return "add_task"
@@ -274,10 +280,6 @@ def analyze_intent(message: str) -> str:
     if any(word in message_lower for word in ["list", "show", "display", "view", "get"]):
         if any(word in message_lower for word in ["task", "todo", "item", "all"]):
             return "list_tasks"
-
-    if any(word in message_lower for word in ["update", "change", "modify", "edit"]):
-        if any(word in message_lower for word in ["task", "todo", "item"]):
-            return "update_task"
 
     if any(word in message_lower for word in ["complete", "done", "finish", "mark"]):
         if any(word in message_lower for word in ["task", "todo", "item"]):
@@ -364,15 +366,15 @@ def handle_update_task(message: str, user_id: int, db: Session, mcp_server: MCPS
     Handle updating a task based on the user's message.
     """
     # Extract task ID and update information
-    # Look for patterns like "update task 1 to have title 'new title'"
+    # Look for patterns like "update task 1 to have title 'new title'" or "update task 1 to have description '...'"
     id_match = re.search(r"(?:update|change|modify|edit)\s+task\s+(\d+)", message.lower())
 
     if id_match:
         task_id = int(id_match.group(1))
 
         # Extract new title and description
-        title_match = re.search(r"(?:title|name|to)\s+(?:is\s+)?['\"](.+?)['\"]", message)
-        desc_match = re.search(r"(?:description|desc|details)\s+(?:is\s+)?['\"](.+?)['\"]", message)
+        title_match = re.search(r"(?:title|name|to)\s+(?:is\s+|to\s+have\s+)?['\"](.+?)['\"]", message)
+        desc_match = re.search(r"(?:to\s+have\s+)?(?:description|desc|details)\s+(?:is\s+|to\s+have\s+)?['\"](.+?)['\"]", message)
 
         update_args = {"user_id": str(user_id), "task_id": task_id}
         if title_match:
@@ -440,18 +442,18 @@ def handle_general_query(message: str, user_id: int, db: Session, mcp_server: MC
     """
     Handle general queries that don't map to specific actions.
     """
-    responses = {
-        "hello": "Hi there! I'm your AI assistant for managing tasks. You can ask me to add, list, update, complete, or delete tasks.",
-        "hi": "Hello! I'm here to help you manage your tasks. Just let me know what you'd like to do!",
-        "help": "I can help you with your tasks! You can ask me to: add a task, list your tasks, update a task, complete a task, or delete a task.",
-        "thank you": "You're welcome! Let me know if there's anything else I can help you with.",
-        "thanks": "You're welcome! Feel free to ask me anything else."
-    }
-
     message_lower = message.lower().strip()
 
-    for trigger, response in responses.items():
-        if trigger in message_lower:
-            return response
+    # Check for specific phrases rather than just substrings
+    if any(greeting in message_lower for greeting in ["hello", "hi", "hey"]):
+        return "Hi there! I'm your AI assistant for managing tasks. You can ask me to add, list, update, complete, or delete tasks."
+    elif "help" in message_lower:
+        return "I can help you with your tasks! You can ask me to: add a task, list your tasks, update a task, complete a task, or delete a task."
+    elif any(thanks in message_lower for thanks in ["thank you", "thanks"]):
+        return "You're welcome! Let me know if there's anything else I can help you with."
+    elif "what time is it" in message_lower or "what's the time" in message_lower:
+        return f"The current time is {datetime.now().strftime('%H:%M %p')}."
+    elif "what date is it" in message_lower or "what's the date" in message_lower or "today's date" in message_lower:
+        return f"Today's date is {datetime.now().strftime('%Y-%m-%d')}."
 
     return f"I'm not sure how to help with that. You can ask me to add, list, update, complete, or delete tasks. Your message: '{message}'"

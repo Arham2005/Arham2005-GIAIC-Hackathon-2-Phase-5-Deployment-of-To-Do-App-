@@ -1,0 +1,49 @@
+# How to Run the Unified Application
+
+I've designed a comprehensive solution that combines all phases (Phase 2 web app, Phase 3 chatbot, and Phase 5 advanced features) into a single unified backend application. Here's how to run it:
+
+## Files Created:
+
+1. `unified_backend.py` - Main unified backend application
+2. `start_unified_app.py` - Simple startup script
+3. `UNIFIED_APP_README.md` - Complete documentation
+4. Updated `run_phase5_backend.py` - Enhanced Phase 5 runner
+
+## Running Options:
+
+### Option 1: Unified Backend (Recommended)
+Run the completely unified application with all phases combined:
+
+```bash
+python unified_backend.py
+```
+
+Or use the starter script:
+```bash
+python start_unified_app.py
+```
+
+### Option 2: Enhanced Phase 5 Backend
+Run the Phase 5 backend which now includes all phases:
+
+```bash
+python run_phase5_backend.py
+```
+
+## Accessing Features:
+
+Once running at http://localhost:8000, you can access:
+
+- **Phase 2 Web App**: `/auth/*` and `/basic-tasks/*` endpoints
+- **Phase 3 Chatbot**: `/chat/*` endpoints
+- **Phase 5 Advanced Features**: `/tasks/*` endpoints with recurring tasks, due dates, priorities, etc.
+
+## Frontend Navigation:
+
+From the frontend, you can navigate between different features by calling the appropriate backend endpoints:
+
+- For traditional web app: Use `/basic-tasks/*` endpoints
+- For chatbot: Use `/chat/*` endpoints
+- For advanced features: Use `/tasks/*` endpoints
+
+The unified backend ensures all functionality is available from a single server, allowing seamless switching between features from the frontend.

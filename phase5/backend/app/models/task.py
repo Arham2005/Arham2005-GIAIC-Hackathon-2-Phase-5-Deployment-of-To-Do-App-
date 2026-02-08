@@ -1,6 +1,8 @@
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime
+from sqlalchemy import Column, JSON
+import json
 
 
 class TaskBase(SQLModel):
@@ -8,7 +10,7 @@ class TaskBase(SQLModel):
     description: Optional[str] = None
     completed: bool = False
     priority: Optional[str] = "medium"  # low, medium, high, urgent
-    tags: Optional[List[str]] = []  # Store as JSON
+    tags: Optional[str] = Field(default='[]')  # Store as JSON string
     due_date: Optional[datetime] = None
     recurring: bool = False
     recurrence_pattern: Optional[str] = None  # daily, weekly, monthly, yearly
@@ -38,7 +40,7 @@ class TaskCreate(TaskBase):
     title: str
     description: Optional[str] = None
     priority: Optional[str] = "medium"
-    tags: Optional[List[str]] = []
+    tags: Optional[List[str]] = None  # Accept list but convert to JSON string
     due_date: Optional[datetime] = None
     recurring: bool = False
     recurrence_pattern: Optional[str] = None
@@ -54,6 +56,17 @@ class TaskRead(TaskBase):
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_orm(cls, obj):
+        # Convert JSON string tags to list when reading
+        instance = super().from_orm(obj)
+        if hasattr(instance, 'tags') and isinstance(instance.tags, str):
+            try:
+                instance.tags = json.loads(instance.tags)
+            except:
+                instance.tags = []
+        return instance
 
 
 class TaskUpdate(SQLModel):

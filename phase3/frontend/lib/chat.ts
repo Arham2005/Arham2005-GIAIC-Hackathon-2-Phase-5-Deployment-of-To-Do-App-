@@ -1,5 +1,5 @@
 // frontend/lib/chat.ts
-const CHAT_API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_URL || 'http://localhost:8000/chat';
+const CHAT_API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_URL || 'http://localhost:8000'; // Base URL without '/chat' to match the router prefix
 
 // Helper function to get auth token from localStorage
 const getAuthToken = (): string | null => {
@@ -25,7 +25,18 @@ const chatApiRequest = async (endpoint: string, options: RequestInit = {}) => {
   });
 
   if (!response.ok) {
-    throw new Error(`Chat API request failed: ${response.status}`);
+    // Try to get the error message from the response
+    let errorMessage = `Chat API request failed: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.detail) {
+        errorMessage += ` - ${errorData.detail}`;
+      }
+    } catch (e) {
+      // If we can't parse the error, just use the status code
+    }
+
+    throw new Error(errorMessage);
   }
 
   return response.json();
@@ -34,13 +45,13 @@ const chatApiRequest = async (endpoint: string, options: RequestInit = {}) => {
 // Chat API functions
 export const chatAPI = {
   startConversation: (convData: { title: string }) =>
-    chatApiRequest('/start', {
+    chatApiRequest('/chat/start', {
       method: 'POST',
       body: JSON.stringify(convData),
     }),
 
   sendMessage: (conversationId: number, messageData: { content: string }) =>
-    chatApiRequest(`/${conversationId}/message`, {
+    chatApiRequest(`/chat/${conversationId}/message`, {
       method: 'POST',
       body: JSON.stringify(messageData),
     }),
@@ -52,12 +63,12 @@ export const chatAPI = {
       conversation_id: conversationId || null
     };
 
-    return chatApiRequest(`/${userId}/chat`, {
+    return chatApiRequest(`/chat/${userId}/chat`, {
       method: 'POST',
       body: JSON.stringify(requestData),
     });
   },
 
   getConversation: (conversationId: number) =>
-    chatApiRequest(`/${conversationId}`),
+    chatApiRequest(`/chat/${conversationId}`),
 };

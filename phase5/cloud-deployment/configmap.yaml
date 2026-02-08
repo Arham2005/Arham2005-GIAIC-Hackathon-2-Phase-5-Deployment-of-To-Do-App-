@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: todo-app-config
+  namespace: todo-app
+data:
+  DATABASE_URL: "postgresql://username:password@external-db-host:5432/todo_db"
+  ENVIRONMENT: "production"
+  ALLOWED_ORIGINS: "https://your-frontend-domain.com"
+  OPENAI_API_KEY: "sk-xxx"
